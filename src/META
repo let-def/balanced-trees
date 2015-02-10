@@ -1,0 +1,26 @@
+description     = "Smart constructors for balanced binary trees"
+version         = "0.1"
+
+package "bt1" (
+ description     = "Nodes with one word of data"
+ archive(byte)   = "bt1.cmo"
+ archive(native) = "bt1.cmx"
+)
+
+package "bt2" (
+ description     = "Nodes with two words of data"
+ archive(byte)   = "bt2.cmo"
+ archive(native) = "bt2.cmx"
+)
+
+package "btw1" (
+ description     = "Weighted nodes with one word of data"
+ archive(byte)   = "btw1.cmo"
+ archive(native) = "btw1.cmx"
+)
+
+package "btw2" (
+ description     = "Weighted nodes with two words of data"
+ archive(byte)   = "btw2.cmo"
+ archive(native) = "btw2.cmx"
+)

@@ -48,8 +48,7 @@ struct
     | Leaf -> n
     | Node (_, l, elt', r) ->
       let c = Ord.compare elt elt' in
-      if c = 0 then join l r
-      else if c < 0 then
+      if c < 0 then
         let l' = remove elt l in
         begin
           if l == l' then
@@ -57,7 +56,7 @@ struct
           else
             node l' elt' r
         end
-      else
+      else if c > 0 then
         let r' = remove elt r in
         begin
           if r == r' then
@@ -65,6 +64,7 @@ struct
           else
             node l elt' r'
         end
+      else join l r
 
   let union _ = failwith "TODO"
   let inter _ = failwith "TODO"
@@ -78,7 +78,7 @@ struct
   let exists _ = failwith "TODO"
   let filter _ = failwith "TODO"
   let partition _ = failwith "TODO"
-  let cardinal _ = failwith "TODO"
+  let cardinal = size
   let elements _ = failwith "TODO"
   let min_elt _ = failwith "TODO"
   let max_elt _ = failwith "TODO"
@@ -155,7 +155,7 @@ struct
   let exists _ = failwith "TODO"
   let filter _ = failwith "TODO"
   let partition _ = failwith "TODO"
-  let cardinal _ = failwith "TODO"
+  let cardinal = size
   let bindings _ = failwith "TODO"
   let min_binding _ = failwith "TODO"
   let max_binding _ = failwith "TODO"
@@ -166,7 +166,7 @@ struct
   let mapi _ = failwith "TODO"
 end
 
-module Balanced_wset (Ord : Set.OrderedType) : Set.S with type elt = Ord.t =
+module Balanced_wset (Ord : Set.OrderedType) (*Set.S with type elt = Ord.t*) =
 struct
   type elt = Ord.t
   type t = elt Btw_1.t
@@ -188,28 +188,28 @@ struct
       else
         mem elt r
 
-  let singleton elt = node leaf 1 elt leaf
+  let singleton w elt = node leaf w elt leaf
 
-  let rec add elt = function
-    | Leaf -> singleton elt
+  let rec add w elt = function
+    | Leaf -> singleton w elt
     | Node (_, l, elt', r) as n ->
       let c = Ord.compare elt elt' in
       if c = 0 then n
       else if c < 0 then
-        let l' = add elt l in
+        let l' = add w elt l in
         begin
           if l == l' then
             n
           else
-            node l' 1 elt' r
+            node l' (item_size n) elt' r
         end
       else
-        let r' = add elt r in
+        let r' = add w elt r in
         begin
           if r == r' then
             n
           else
-            node l 1 elt' r'
+            node l (item_size n) elt' r'
         end
 
   let rec remove elt n = match n with
@@ -347,14 +347,9 @@ module IntMap0 = Map.Make(Int)
 module IntMap1 = Balanced_map(Int)
 module IntMap1w = Balanced_wmap(Int)
 
-let count = 5_000_000
+let count = 1_000_000
 
-let shuf n =
-  ((n land 0xff) lsl 24) lor
-  ((n land 0xff00) lsl 8) lor
-  ((n land 0xff0000) lsr 8) lor
-  ((n land 0xff000000) lsr 24)
-(*let shuf n = n*)
+let shuf n = (n * 2654435761) land 0xFFFFFFFF
 
 let test_set init add rem =
   Gc.full_major ();
@@ -362,13 +357,18 @@ let test_set init add rem =
   let time = Sys.time () in
   for i = 1 to count do
     let i = shuf i in
-    m := add i !m
+    m := add (shuf i) i !m
   done;
-  (*for i = count downto 1 do
+  let minor = (Gc.stat ()).Gc.minor_words in
+  for i = 1 to count do
     let i = shuf i in
-    m := rem i !m
-  done;*)
-  Sys.time () -. time
+    m := rem i !m;
+    (*if (counter !m mod 1531 = 0) then
+    (  print_int (counter !m); print_newline ());*)
+  done;
+  let time = Sys.time () -. time in
+  let mem = (Gc.stat ()).Gc.minor_words -. minor in
+  time, mem
 
 let test_map init add rem =
   Gc.full_major ();
@@ -378,24 +378,25 @@ let test_map init add rem =
     let i = shuf i in
     m := add i i !m
   done;
-  (*for i = count downto 1 do
+  let minor = (Gc.stat ()).Gc.minor_words in
+  for i = count downto 1 do
     let i = shuf i in
     m := rem i !m
-  done;*)
-  Sys.time () -. time
+  done;
+  let time = Sys.time () -. time in
+  let mem = (Gc.stat ()).Gc.minor_words -. minor in
+  time, mem
 
 
 let main () =
   List.iter
     (fun (name, result) ->
-       let minor = (Gc.stat ()).Gc.minor_words in
-       let lazy result = result in
-       let minor = (Gc.stat ()).Gc.minor_words -. minor in
-       Printf.printf "\t%s: time:%f memory:%f \n%!" name result minor;
+       let lazy (time, mem) = result in
+       Printf.printf "\t%s: time:%f memory:%f \n%!" name time mem;
     )
     [
-      "Set.Make", lazy IntSet0.(test_set empty add remove);
-      "Balanced_set", lazy IntSet1.(test_set empty add remove);
+      "Set.Make", lazy IntSet0.(test_set empty (fun _ -> add) remove);
+      "Balanced_set", lazy IntSet1.(test_set empty (fun _ -> add) remove);
       "Balanced_wset", lazy IntSet1w.(test_set empty add remove);
       "Map.Make", lazy IntMap0.(test_map empty add remove);
       "Balanced_map", lazy IntMap1.(test_map empty add remove);
